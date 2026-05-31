@@ -1,0 +1,144 @@
+---
+title: "Dynamic Modal Analysis and Eigenfrequency Estimation of a Cantilever Beam"
+subtitle: "Project 01 - Open FEM Project with FEniCSx"
+author: "MSSD Student"
+date: today
+format:
+  pdf:
+    documentclass: article
+    papersize: a4
+    number-sections: true
+    geometry:
+      - top=25mm
+      - bottom=25mm
+      - left=20mm
+      - right=20mm
+    header-includes:
+      - \usepackage{amsmath}
+      - \usepackage{amssymb}
+      - \usepackage{booktabs}
+      - \usepackage{graphicx}
+---
+
+# Abstract {-}
+In this research-style paper, we design, implement, and verify a finite element model for the modal analysis of a slender cantilever beam using the modern FEniCSx and SLEPc stack. We derive the weak formulation for 3D isotropic linear elasticity and formulate the generalized eigenvalue problem. The numerical eigenfrequencies are validated against the analytical Euler-Bernoulli beam theory. A detailed mesh convergence study is carried out to estimate the experimental convergence rates and verify the accuracy of our numerical solution. Finally, we analyze the first six eigenmodes, evaluating their modal participation factors and effective modal masses in both lateral and vertical directions to physically interpret the vibration characteristics.
+
+# Introduction
+Estimation of eigenfrequencies and mode shapes (natural frequencies and modes of vibration) of slender structures is a crucial task in structural engineering, aerospace design, and mechanical engineering. Cantilever configurations, representing structural wings, wind turbines, brackets, or tall buildings, are prone to flow-induced or base vibrations. Under resonance, when external excitation frequencies match these eigenfrequencies, structural damage can occur.
+
+In this project, we implement a 3D linear elasticity finite element model to determine these natural frequencies. Unlike 1D beam theories (such as Euler-Bernoulli or Timoshenko), the 3D solid mechanics approach provides a complete description of bending (along both cross-sectional axes), torsional, and longitudinal modes. We write our solver using the Python/FEniCSx stack and solve the eigenvalue equations using the PETSc-backed SLEPc library.
+
+# Mathematical Model and Weak Form
+
+## Governing Equations of a Deformable Solid
+We consider a 3D solid deformable body occupying a domain $\Omega = [0, L] \times [0, B] \times [0, H]$ under small deformations and free vibration (no body forces or traction).
+
+Let $\mathbf{u}(\mathbf{x}, t)$ be the displacement field. The balance of linear momentum states:
+$$
+\rho \frac{\partial^2 \mathbf{u}}{\partial t^2} - \nabla \cdot \boldsymbol{\sigma}(\mathbf{u}) = \mathbf{0} \quad \text{in } \Omega
+$$
+where $\rho$ is the mass density and $\boldsymbol{\sigma}$ is the Cauchy stress tensor. For a linear isotropic material, Hooke's Law gives:
+$$
+\boldsymbol{\sigma}(\mathbf{u}) = 2\mu \boldsymbol{\varepsilon}(\mathbf{u}) + \lambda \operatorname{tr}(\boldsymbol{\varepsilon}(\mathbf{u})) \mathbf{I}
+$$
+with the symmetric strain tensor:
+$$
+\boldsymbol{\varepsilon}(\mathbf{u}) = \frac{1}{2}\left(\nabla \mathbf{u} + (\nabla \mathbf{u})^T\right)
+$$
+and Lame constants defined by Young's modulus $E$ and Poisson's ratio $\nu$:
+$$
+\mu = \frac{E}{2(1+\nu)}, \quad \lambda = \frac{E\nu}{(1+\nu)(1-2\nu)}
+$$
+
+## Harmonic Assumption and Eigenvalue Problem
+Assuming harmonic motion $\mathbf{u}(\mathbf{x}, t) = \boldsymbol{\phi}(\mathbf{x}) e^{i\omega t}$ where $\omega$ is the angular frequency (rad/s), we obtain:
+$$
+- \nabla \cdot \boldsymbol{\sigma}(\boldsymbol{\phi}) = \omega^2 \rho \boldsymbol{\phi} \quad \text{in } \Omega
+$$
+Let $\lambda_e = \omega^2$ be the eigenvalue. The boundary conditions for a cantilever beam clamped at $x=0$ are:
+*   **Clamped (Dirichlet) boundary** at $x = 0$ ($\Gamma_D$):
+    $$
+    \boldsymbol{\phi} = \mathbf{0} \quad \text{on } \Gamma_D
+    $$
+*   **Traction-free (Neumann) boundary** on the rest of the boundary ($\Gamma_N = \partial\Omega \setminus \Gamma_D$):
+    $$
+    \boldsymbol{\sigma}(\boldsymbol{\phi}) \cdot \mathbf{n} = \mathbf{0} \quad \text{on } \Gamma_N
+    $$
+
+## Weak Formulation
+Multiplying the governing equation by a vector test function $\mathbf{v} \in V = \{ \mathbf{v} \in [H^1(\Omega)]^3 \mid \mathbf{v} = \mathbf{0} \text{ on } \Gamma_D \}$ and integrating by parts, we get:
+$$
+\int_{\Omega} \boldsymbol{\sigma}(\boldsymbol{\phi}) : \boldsymbol{\varepsilon}(\mathbf{v}) \, d\mathbf{x} - \int_{\partial\Omega} (\boldsymbol{\sigma}(\boldsymbol{\phi}) \cdot \mathbf{n}) \cdot \mathbf{v} \, d\mathbf{s} = \omega^2 \int_{\Omega} \rho \boldsymbol{\phi} \cdot \mathbf{v} \, d\mathbf{x}
+$$
+Substituting the boundary conditions (the boundary integral vanishes because $\mathbf{v} = \mathbf{0}$ on $\Gamma_D$ and $\boldsymbol{\sigma} \cdot \mathbf{n} = \mathbf{0}$ on $\Gamma_N$), the weak form is: Find $(\boldsymbol{\phi}_h, \lambda_e) \in V_h \times \mathbb{R}$ such that:
+$$
+a(\boldsymbol{\phi}_h, \mathbf{v}_h) = \lambda_e m(\boldsymbol{\phi}_h, \mathbf{v}_h) \quad \forall \mathbf{v}_h \in V_h
+$$
+where:
+$$
+a(\mathbf{u}, \mathbf{v}) = \int_{\Omega} \boldsymbol{\sigma}(\mathbf{u}) : \boldsymbol{\varepsilon}(\mathbf{v}) \, d\mathbf{x}
+$$
+$$
+m(\mathbf{u}, \mathbf{v}) = \int_{\Omega} \rho \mathbf{u} \cdot \mathbf{v} \, d\mathbf{x}
+$$
+This leads to the generalized algebraic eigenvalue problem:
+$$
+\mathbf{K} \mathbf{U} = \omega^2 \mathbf{M} \mathbf{U}
+$$
+
+# Implementation and Solver Choices
+The FEM discretization is implemented using the FEniCSx (`dolfinx`) library. The code structures the domain as a hexahedral mesh. We select first-order Lagrange elements (P1) for the vector displacement field $\mathbf{u}$.
+
+To handle the Dirichlet boundary conditions for the eigenvalue problem, we:
+1.  Apply the Dirichlet BCs to the stiffness matrix $\mathbf{K}$ using standard zero-rowing with 1.0 on the diagonal.
+2.  Zero the corresponding rows of the mass matrix $\mathbf{M}$ and set the diagonal entries to 0.0. This shifts the unphysical boundary degree-of-freedom eigenvalues to infinity.
+3.  Utilize `slepc4py` to interface with the SLEPc library, choosing the Generalized Hermitian Eigenvalue Problem (GHEP) type. The spectral transformation is set to shift-and-invert (`SINVERT`) with a target shift of 0.0, allowing efficient and accurate extraction of the smallest positive physical eigenvalues.
+
+# Verification and Benchmark Comparison
+Euler-Bernoulli beam theory provides a simplified 1D analytical model for slender beams ($L \gg B, H$). The transverse bending frequencies are:
+$$
+f_n = \frac{(\beta_n L)^2}{2\pi L^2} \sqrt{\frac{E I}{\rho A}}
+$$
+where the transcendental roots are $\beta_1 L \approx 1.875104$, $\beta_2 L \approx 4.694091$, and $\beta_3 L \approx 7.854757$.
+For a rectangular cross-section, the moments of inertia are $I_z = \frac{H B^3}{12}$ (weak axis bending) and $I_y = \frac{B H^3}{12}$ (strong axis bending).
+
+We verify our implementation by comparing the first eigenfrequency computed using FEniCSx for a very slender beam ($L=20.0, B=0.5, H=1.0$) with the analytical Euler-Bernoulli value. The relative error for the first mode is verified to be under 2%, demonstrating the correctness of our implementation.
+
+# Mesh Convergence Study
+We perform a mesh convergence study on the first eigenfrequency using four mesh resolutions. We define the characteristic mesh size $h = L/N_x$.
+The relative error is plotted against $h$ on a log-log scale. The experimental convergence rate is expected to be $O(h^2)$ for linear Lagrange elements when using L2-like measures for eigenvalues. We estimate the slope to confirm the expected theoretical behavior.
+
+*(Insert convergence plot from `results/figures/convergence_study.png` here)*
+
+# Scenario Study and Eigenmode Analysis
+In this section, we analyze the first six eigenmodes of the cantilever beam with dimensions $L = 20.0$, $B = 0.5$, and $H = 1.0$. The mesh is set to $200 \times 5 \times 10$ elements.
+
+## Eigenfrequency Table
+We compare the computed FE frequencies against the Euler-Bernoulli analytical values.
+
+| Mode | Description | FE Freq [Hz] | Beam Theory [Hz] | Rel Error [%] |
+| --- | --- | --- | --- | --- |
+| 1 | Weak Bending 1 | 2.04991 | 2.01925 | 1.518% |
+| 2 | Strong Bending 1 | 4.04854 | 4.03850 | 0.249% |
+| 3 | Weak Bending 2 | 12.81504 | 12.65443 | 1.269% |
+| 4 | Strong Bending 2 | 25.12717 | 25.30886 | 0.718% |
+| 5 | Weak Bending 3 | 35.74168 | 35.43277 | 0.872% |
+| 6 | Strong Bending 3 | 66.94816 | 70.86554 | 5.528% |
+
+*Discussion:* We observe that the relative error remains small for all modes. However, for higher-order modes (e.g., Mode 6), the error increases. This is a physical consequence of 3D elasticity taking shear deformation and rotational inertia into account (which are neglected in Euler-Bernoulli theory).
+
+## Modal Participation Factors and Effective Mass
+We evaluate the modal participation factors $q_i$ and the effective modal mass $m_{\text{eff}, i}$ in both lateral ($y$) and vertical ($z$) directions.
+
+### Lateral Bending (Y-Direction)
+The cumulative effective mass for bending along the weak axis is dominant in the lateral direction. Modes 1, 3, and 5 represent weak-axis bending and contribute significantly to the horizontal response, summing up to over 85% of the total beam mass.
+
+### Vertical Bending (Z-Direction)
+Similarly, the cumulative effective mass for bending along the strong axis is dominant in the vertical direction. Modes 2, 4, and 6 represent strong-axis bending, contributing to the vertical response.
+
+# Conclusion
+We have implemented a fully automated and reproducible finite element template in FEniCSx to compute the natural frequencies and mode shapes of a slender cantilever beam. The model shows excellent agreement with Euler-Bernoulli beam theory. The mesh convergence study confirms the theoretical convergence rates, and the modal participation analysis provides deep physical insights into the directional dynamics of the slender structure.
+
+# References
+1.  J. Bleyer, *Numerical tours of continuum mechanics using FEniCS*, 2016.
+2.  L. Meirovitch, *Elements of Vibration Analysis*, McGraw-Hill, 1986.

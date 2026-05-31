@@ -1,0 +1,15 @@
+name: fenicsx-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - fenics-dolfinx
+  - mpich
+  - petsc
+  - slepc
+  - numpy
+  - matplotlib
+  - scipy
+  - pytest
+  - pyvista
+  - vtk
