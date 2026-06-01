@@ -198,12 +198,12 @@ def main():
     plot_mode_shapes(
         mesh_A, results_A, "Variant A",
         output_path="results/figures/modes_variantA.png",
-        n_modes=3,
+        n_modes=6,
     )
     plot_mode_shapes(
         mesh_B, results_B, "Variant B",
         output_path="results/figures/modes_variantB.png",
-        n_modes=3,
+        n_modes=6,
     )
 
     # Frequency bar chart
